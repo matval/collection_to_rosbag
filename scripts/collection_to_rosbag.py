@@ -8,7 +8,6 @@ Created on Sat Jan  9 13:48:17 2021
 import os
 import cv2 
 import argparse
-import zipfile
 import pandas as pd
 import numpy as np
 
@@ -25,7 +24,16 @@ def main(args):
     #zf = zipfile.ZipFile(args.collection)
     bridge = CvBridge()
     
-    with rosbag.Bag(args.output, 'w') as bag:
+    if args.output == None:
+        name_array = args.collection.split('/')
+        i=1
+        while len(name_array[-i]) == 0:
+            i+=1
+        output_name = name_array[-i] + '.bag'
+    else:
+        output_name = args.output
+    
+    with rosbag.Bag(output_name, 'w') as bag:
         '''
         ## Save system log part
         # read system_log
@@ -64,31 +72,32 @@ def main(args):
             timestamp = rospy.Time.from_sec(time_sec)
             imu_msg = Imu()
             imu_msg.header.stamp = timestamp
+            
+            if 'GyroVRoll' in df.columns:
+                # Populate the data elements for IMU
+                imu_msg.angular_velocity.x = df['GyroVRoll'][row]
+                imu_msg.angular_velocity.y = df['GyroVPitch'][row]
+                imu_msg.angular_velocity.z = df['GyroVYaw'][row]
+                imu_msg.linear_acceleration.x = df['AccelerometerX'][row]
+                imu_msg.linear_acceleration.y = df['AccelerometerY'][row]
+                imu_msg.linear_acceleration.z = df['AccelerometerZ'][row]
+                '''
+                imu_msg.orientation.w = df['AccelerometerX'][row]
+                imu_msg.orientation.x = df['AccelerometerX'][row]
+                imu_msg.orientation.y = df['AccelerometerX'][row]
+                imu_msg.orientation.z = df['AccelerometerX'][row]
+                '''
     
-            # Populate the data elements for IMU
-            imu_msg.angular_velocity.x = df['GyroVRoll'][row]
-            imu_msg.angular_velocity.y = df['GyroVPitch'][row]
-            imu_msg.angular_velocity.z = df['GyroVYaw'][row]
-            imu_msg.linear_acceleration.x = df['AccelerometerX'][row]
-            imu_msg.linear_acceleration.y = df['AccelerometerY'][row]
-            imu_msg.linear_acceleration.z = df['AccelerometerZ'][row]
-            '''
-            imu_msg.orientation.w = df['AccelerometerX'][row]
-            imu_msg.orientation.x = df['AccelerometerX'][row]
-            imu_msg.orientation.y = df['AccelerometerX'][row]
-            imu_msg.orientation.z = df['AccelerometerX'][row]
-            '''
-    
-            bag.write("terrasentia/imu", imu_msg, timestamp)
-    
-            gps_msg = NavSatFix()
-            gps_msg.header.stamp = timestamp
-    
-            # Populate the data elements for GPS
-            gps_msg.latitude = df['GPSLatitude'][row]
-            gps_msg.longitude = df['GPSLongitude'][row]
-            bag.write("terrasentia/gnss", imu_msg, timestamp)
+                bag.write("/terrasentia/imu", imu_msg, timestamp)
+            
+            if 'GPSLatitude' in df.columns:
+                gps_msg = NavSatFix()
+                gps_msg.header.stamp = timestamp
         
+                # Populate the data elements for GPS
+                gps_msg.latitude = df['GPSLatitude'][row]
+                gps_msg.longitude = df['GPSLongitude'][row]
+                bag.write("/terrasentia/gnss", imu_msg, timestamp)
         
         # Save lidar log
         df = pd.read_csv(lidar_log, header=None)
@@ -113,7 +122,7 @@ def main(args):
             laser_msg.scan_time: 0.0250000003725
             laser_msg.range_min: 0.019999999553
     
-            bag.write("terrasentia/scan", laser_msg, timestamp)
+            bag.write("/terrasentia/scan", laser_msg, timestamp)
             
         # Save images
         df = pd.read_csv(cam_front)
@@ -154,7 +163,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--collection", help='collection path')
-    parser.add_argument("--output", default='output.bag', help='output path and name')
+    parser.add_argument("--output", help='output path and name')
 
     args = parser.parse_args()
 
